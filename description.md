@@ -1,0 +1,1 @@
+The *Crime in London* Dashboard is a tool that allows users to explore crime data in London. It provides a comprehensive view of crime trends, patterns, and locations across the city. The dashboard is designed to help users understand the crime landscape in London and make informed decisions.
