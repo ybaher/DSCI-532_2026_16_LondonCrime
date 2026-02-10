@@ -26,14 +26,4 @@ User Stories:
 
 ## Section 4: Exploratory Data Analysis
 
-#### [Heat Map Visualization:]{.underline}
-
--   With the use of the heat map, users can easily hover over their desired borough and check the number or crime rates. This heat map is especially useful for users that are looking for a specific neighborhood/borough and the number of crimes, and the type of crime that took place there. The heat map could be a useful visualization for the lawyer, checking the for the median number of crimes in Barnet.
-
-#### [Line Plot Visualization:]{.underline}
-
--   For users wanting to see the safest neighborhoods in London, they could use this line plot to get an understanding of the top 10 safest boroughs in London. With this line plot, the number of crimes over the past several years is shown, giving the user a quick and easy visualization of the potential borough they want to live in.
-
 ## Section 5: App Sketch & Description
-
-![Sketch](../img/mockup.png)
