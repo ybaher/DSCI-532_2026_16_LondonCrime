@@ -10,5 +10,6 @@ dependencies:
     - altair-all=5.4.*
     - vega_datasets
     - scipy
+    - shiny
     - pip:
         - altair_ally
