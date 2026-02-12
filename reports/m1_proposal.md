@@ -1,6 +1,20 @@
 ## Section 1: Motivation and Purpose
 
+**Target Audience:** The dashboard serves government employees focused on London's public safety, prospective residents and relocators evaluating neighbourhoods, tourists planning stays, and legal professionals needing crime statistics for cases. We embody the role of a data analyst providing an accessible, evidence-based view of crime across London.
+
+**Problem:** These audiences face a common challenge: crime data is fragmented, hard to interpret, and difficult to compare across boroughs and time. Government staff need quick, high-level summaries; residents and tourists want to identify safer areas; legal professionals need to validate or challenge claims about crime in specific boroughs.
+
+**Solution:** The *Crime in London* dashboard centralises crime data in one interactive tool. Users can filter by year range and crime type, view key metrics (total crimes, crime rate, most common crime, average response time), and explore trends and patterns via charts. This helps users make informed decisions—whether choosing a borough to live in, selecting a hotel, or corroborating legal arguments.
+
+---
+
 ## Section 2: Description of the Data
+
+**Stats:** The London Crime dataset has approximately **1,048,574 rows** and **7 columns**. Each row represents a recorded crime incident aggregated at the LSOA (Lower Layer Super Output Area) level, with variables: `lsoa_code`, `borough`, `major_category`, `minor_category`, `value` (crime count), `year`, and `month`. Data spans from 2008 to 2016 across London's 32 boroughs.
+
+**Relevance:** These variables map directly to user needs. `borough` supports borough-level comparisons for relocation and tourism; `major_category` and `minor_category` enable filtering by crime type (e.g., theft, burglary, violence); `year` and `month` support temporal analysis for trend detection and legal validation; and `value` provides counts for aggregations and rate calculations.
+
+---
 
 ## Section 3: Research Questions & Usage Scenarios
 
