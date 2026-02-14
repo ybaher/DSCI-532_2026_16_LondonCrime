@@ -40,6 +40,7 @@ User Stories:
 
 ## Section 4: Exploratory Data Analysis
 
+<<<<<<< HEAD
 #### [Heat Map Visualization:]{.underline}
 
 -   With the use of the heat map, users can easily hover over their desired borough and check the number or crime rates. This heat map is especially useful for users that are looking for a specific neighborhood/borough and the number of crimes, and the type of crime that took place there. The heat map could be a useful visualization for the lawyer, checking the for the median number of crimes in Barnet.
