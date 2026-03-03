@@ -39,20 +39,32 @@ CRIME_CSS = "\n".join(
     f'.crime-color-{i} {{ color: {color} !important; font-weight: bold; }}'
     for i, color in enumerate(CRIME_COLORS.values())
 )
+
+# CSS block that maps each crime type to its color for value box highlight from Claude
+CHECKBOX_CSS = "\n".join(
+    f'#major_category > div:nth-child({i + 1}) label {{ color: {color}; font-weight: 600; }}'
+    for i, color in enumerate(CRIME_COLORS.values())
+)
+
 CRIME_COLOR_INDEX = {name: i for i, name in enumerate(CRIME_COLORS.keys())}
 
-app_ui = ui.page_fillable(
-    ui.panel_title("Crime in London"),
-    # Asked Claude for CSS styling to make the year labels smaller and the numbers larger in the text boxes.
-    ui.tags.style(f"""
+
+app_ui = ui.page_navbar(
+    ui.nav_panel(
+        "Crime in London Dashboard",
+        # Asked Claude for CSS styling to make the year labels smaller and the numbers larger in the text boxes and make the graphs larger
+        ui.tags.style(f"""
         #total_crimes {{ font-size: 2rem; font-weight: bold; }}
         #crime_rate {{ font-size: 2rem; font-weight: bold; }}
         #year_label_1, #year_label_2, #year_label_3, #year_label_4 {{ font-size: 0.8rem; opacity: 0.7; }}
-        .crime-value {{ font-size: 1.5rem; font-weight: bold; display: block; }}
-        .crime-label {{ font-size: 0.8rem; opacity: 0.7; display: block; margin-top: 0.5rem; }}
+        .bslib-value-box {{ min-height: 120px !important; }}
+        .bslib-value-box .value-box-grid {{ padding: 0.5rem !important; }}
+        .bslib-card {{ min-height: 500px; }}
+        .crime-value {{ font-size: 1rem; font-weight: bold; display: block; }}
+        .crime-label {{ font-size: 0.7rem; opacity: 0.7; display: block; margin-top: 0.25rem; }}
         {CRIME_CSS}
+        {CHECKBOX_CSS}
     """),
-    # Create sidebar
     ui.layout_sidebar(
         ui.sidebar(
             # Year Selector
@@ -63,32 +75,11 @@ app_ui = ui.page_fillable(
                             value=[data.year.min(), data.year.max()], sep=""
                             ),
             # Crime Type Checkbox with Custom Coloring
-            ui.tags.div(
-                ui.tags.label("Crime Types", style="font-weight: bold; display: block; margin-bottom: 0.5rem;"),
-                # Asked Claude to generate the code to color the checkboxes to match the global crime type colors dictionary. Copied code from Claude and replaced placeholder values (such as name).
-                ui.tags.div(
-                    *[
-                        ui.tags.div(
-                            ui.tags.input(
-                                type="checkbox",
-                                name="major_category",
-                                value=crime,
-                                checked="checked",
-                                id=f"major_category_{i}",
-                                style=f"margin-right: 0.4rem; accent-color: {CRIME_COLORS[crime]}; color: white;",
-                            ),
-                            ui.tags.label(
-                                crime,
-                                **{"for": f"major_category_{i}"},
-                                style=f"color: {CRIME_COLORS[crime]}; font-weight: 600; cursor: pointer;",
-                            ),
-                            style="display: flex; align-items: center; margin-bottom: 0.3rem;",
-                        )
-                        for i, crime in enumerate(CRIME_TYPES)
-                    ],
-                    id="major_category",
-                    class_="shiny-input-checkboxgroup",
-                ),
+            ui.input_checkbox_group(
+                "major_category",
+                "Crime Types",
+                choices=CRIME_TYPES,
+                selected=CRIME_TYPES,
             ),
             # Borough Multi-Selector with Searching
             ui.input_selectize(  
@@ -100,72 +91,71 @@ app_ui = ui.page_fillable(
             ui.input_action_button("reset_filter", "Clear Filters"),
             open="desktop",
         ),
-    # Summary Info Text Boxes
-    ui.layout_columns(
-        ui.value_box(
-            "Total Crimes in London", 
-            ui.output_text("year_label_1"), 
-            ui.tags.div(
-                ui.tags.div(ui.output_text("total_crimes"), class_="crime-value"),
-                ui.tags.span("crimes", style="font-size: 0.8rem; opacity: 0.7;"),
+        # Summary Info Text Boxes
+        ui.layout_columns(
+            ui.value_box(
+                "Total Crimes in London", 
+                ui.output_text("year_label_1"), 
+                ui.tags.div(
+                    ui.tags.div(ui.output_text("total_crimes"), class_="crime-value"),
+                    ui.tags.span("crimes", style="font-size: 0.8rem; opacity: 0.7;"),
+                ),
+                ),
+            ui.value_box(
+                "Average Monthly Crime Rate in London", 
+                ui.output_text("year_label_2"), 
+                ui.tags.div(
+                    ui.tags.div(ui.output_text("crime_rate"), class_="crime-value"),
+                    ui.tags.span("crimes per month", style="font-size: 0.8rem; opacity: 0.7;"),
+                ),
+                ),
+            ui.value_box(
+                "Max/Min Crime in London - Type",
+                ui.output_text("year_label_3"),
+                ui.tags.div(
+                    ui.tags.span("Most Common Crime", class_="crime-label"),
+                    ui.tags.div(ui.output_ui("most_common_crime"), class_="crime-value"),
+                    ui.tags.span("Least Common Crime", class_="crime-label"),
+                    ui.tags.div(ui.output_ui("least_common_crime"), class_="crime-value"),
+                ),
             ),
+            ui.value_box(
+                "Max/Min Crime in London - Borough",
+                ui.output_text("year_label_4"),
+                ui.tags.div(
+                    ui.tags.span("Highest Amount of Crime", class_="crime-label"),
+                    ui.tags.div(ui.output_text("highest_crime_borough"), class_="crime-value"),
+                    ui.tags.span("Lowest Amount of Crime", class_="crime-label"),
+                    ui.tags.div(ui.output_text("lowest_crime_borough"), class_="crime-value"),
+                ),
             ),
-        ui.value_box(
-            "Average Monthly Crime Rate in London", 
-            ui.output_text("year_label_2"), 
-            ui.tags.div(
-                ui.tags.div(ui.output_text("crime_rate"), class_="crime-value"),
-                ui.tags.span("crimes per month", style="font-size: 0.8rem; opacity: 0.7;"),
-            ),
-            ),
-        ui.value_box(
-            "Max/Min Crime in London - Type",
-            ui.output_text("year_label_3"),
-            ui.tags.div(
-                ui.tags.span("Most Common Crime", class_="crime-label"),
-                ui.tags.div(ui.output_ui("most_common_crime"), class_="crime-value"),
-                ui.tags.span("Least Common Crime", class_="crime-label"),
-                ui.tags.div(ui.output_ui("least_common_crime"), class_="crime-value"),
-            ),
+            fill=False,
         ),
-        ui.value_box(
-            "Max/Min Crime in London - Borough",
-            ui.output_text("year_label_4"),
-            ui.tags.div(
-                ui.tags.span("Highest Amount of Crime", class_="crime-label"),
-                ui.tags.div(ui.output_text("highest_crime_borough"), class_="crime-value"),
-                ui.tags.span("Lowest Amount of Crime", class_="crime-label"),
-                ui.tags.div(ui.output_text("lowest_crime_borough"), class_="crime-value"),
+            ui.navset_card_underline(
+            ui.nav_panel(
+                "By Borough & Type",
+                ui.card(output_widget("borough_trend"), full_screen=True),
             ),
+            ui.nav_panel(
+                "By Type (Bar)",
+                ui.card(output_widget("crime_type_counts"), full_screen=True),
+            ),
+            ui.nav_panel(
+                "By Type Over Time",
+                ui.card(output_widget("crime_type_trend"), full_screen=True),
+            ),
+            ui.nav_panel(
+                "Heatmap: Type × Month",
+                ui.card(output_widget("crime_type_month_heatmap"), full_screen=True),
+            ),
+            ui.nav_panel(
+                "Heatmap: Borough × Month",
+                ui.card(output_widget("borough_month_heatmap"), full_screen=True),
+            ),
+            title="Crime Plots",
         ),
-        fill=False,
     ),
-    # Plots
-    ui.layout_columns(
-        ui.card(
-            output_widget("borough_trend"),
-            full_screen=True,
-        ),
-        ui.card(
-            output_widget("crime_type_counts"),
-            full_screen=True,
-        ),
-        ui.card(
-            output_widget("crime_type_trend"),
-            full_screen=True,
-        ),
-    ),
-    ui.layout_columns(
-        ui.card(
-            output_widget("crime_type_month_heatmap"),     
-            full_screen=True,
-        ),
-        ui.card(
-            output_widget("borough_month_heatmap"),
-            full_screen=True,
-        ),
-    ),
-    ),
+
     # Asked Claude for a smaller footer with all text evenly spaced for my app, then filled in the ui.tags.span() with the relevant content.
     ui.tags.footer(
     ui.tags.hr(style="margin: 0;"),
@@ -182,20 +172,13 @@ app_ui = ui.page_fillable(
             ui.tags.span("Last updated: February 26, 2026", style="opacity: 0.7;"),
         ),
         style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; font-size: 0.8rem;",
+        ),
     ),
 ),
+    ui.nav_panel("AI Assistant",
+    ),
+    title="Crime in London",
 )
-
-# Code provided by Claude to ensure every plot has the same ordering of colors for the different crime types, created in conjunction with the CRIME_COLORS dictionary and CRIME_CSS.
-def apply_crime_colors(fig, color_col="major_category"):
-    """Update traces so each crime type uses the consistent palette."""
-    for trace in fig.data:
-        name = trace.name
-        if name in CRIME_COLORS:
-            trace.marker.color = CRIME_COLORS[name]
-            if hasattr(trace, "line"):
-                trace.line.color = CRIME_COLORS[name]
-    return fig
 
 def server(input, output, session):
     @reactive.calc
@@ -217,9 +200,9 @@ def server(input, output, session):
             right=input.year_range()[1],
             inclusive="both",
         )
-        data_filtered = data[year]
-        return data_filtered
-    
+        major_category = data.major_category.isin(input.major_category())
+        return data[year & major_category]
+        
     @render.text
     def total_crimes():
         df = filtered_data_year()
@@ -401,10 +384,7 @@ def server(input, output, session):
     @reactive.event(input.reset_filter)
     def reset_filters():
         ui.update_slider("year_range", value=[int(data.year.min()), int(data.year.max())])
-        ui.update_checkbox_group("major_category", selected=[
-            "Theft and Handling", "Criminal Damage", "Robbery",
-            "Drugs", "Violence Against the Person", "Other Notifiable Offences"
-        ])
+        ui.update_checkbox_group("major_category", selected=CRIME_TYPES)  # resets all 9
         ui.update_selectize("borough", selected=[])
 
 app = App(app_ui, server)
