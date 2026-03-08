@@ -90,26 +90,26 @@ app_ui = ui.page_fillable(
                     class_="shiny-input-checkboxgroup",
                 ),
             ),
-            # Borough Multi-Selector with Searching
+            # Borough Selector with Searching
             ui.input_selectize(  
-                "borough",  
-                "Select Borough(s):",
+                "borough_1",  
+                "Select Borough:",
                 choices=BOROUGHS,
-                multiple=True,  
+                multiple=False, 
+                selected="Croydon" 
             ),  
-            ui.input_action_button("reset_filter", "Clear Filters"),
+            ui.input_selectize(  
+                "borough_2",  
+                "Select Borough:",
+                choices=BOROUGHS,
+                multiple=False,  
+                selected="City of London"
+            ),  
+            ui.input_action_button("reset_filter", "Restore Defaults"),
             open="desktop",
         ),
-    # Summary Info Text Boxes
+    # Summary Info Boxes
     ui.layout_columns(
-        ui.value_box(
-            "Total Crimes in London", 
-            ui.output_text("year_label_1"), 
-            ui.tags.div(
-                ui.tags.div(ui.output_text("total_crimes"), class_="crime-value"),
-                ui.tags.span("crimes", style="font-size: 0.8rem; opacity: 0.7;"),
-            ),
-            ),
         ui.value_box(
             "Average Monthly Crime Rate in London", 
             ui.output_text("year_label_2"), 
@@ -119,8 +119,8 @@ app_ui = ui.page_fillable(
             ),
             ),
         ui.value_box(
-            "Max/Min Crime in London - Type",
-            ui.output_text("year_label_3"),
+            ui.output_text("borough_label_1"),
+            ui.output_text("year_label_2"),
             ui.tags.div(
                 ui.tags.span("Most Common Crime", class_="crime-label"),
                 ui.tags.div(ui.output_ui("most_common_crime"), class_="crime-value"),
@@ -129,13 +129,13 @@ app_ui = ui.page_fillable(
             ),
         ),
         ui.value_box(
-            "Max/Min Crime in London - Borough",
-            ui.output_text("year_label_4"),
+            ui.output_text("borough_label_2"),
+            ui.output_text("year_label_3"),
             ui.tags.div(
-                ui.tags.span("Highest Amount of Crime", class_="crime-label"),
-                ui.tags.div(ui.output_text("highest_crime_borough"), class_="crime-value"),
-                ui.tags.span("Lowest Amount of Crime", class_="crime-label"),
-                ui.tags.div(ui.output_text("lowest_crime_borough"), class_="crime-value"),
+                ui.tags.span("Most Common Crime", class_="crime-label"),
+                ui.tags.div(ui.output_ui("most_common_crime"), class_="crime-value"),
+                ui.tags.span("Least Common Crime", class_="crime-label"),
+                ui.tags.div(ui.output_ui("least_common_crime"), class_="crime-value"),
             ),
         ),
         fill=False,
@@ -199,73 +199,42 @@ def apply_crime_colors(fig, color_col="major_category"):
 
 def server(input, output, session):
     @reactive.calc
-    def filtered_data():
+    def filtered_data_1():
         year = data.year.between(
             left=input.year_range()[0],
             right=input.year_range()[1],
             inclusive="both",
         )
         major_category = data.major_category.isin(input.major_category())
-        borough = data.borough.isin(input.borough())
+        borough = data.borough.isin(input.borough_1())
         data_filtered = data[borough & major_category & year]
         return data_filtered
     
     @reactive.calc
-    def filtered_data_year():
+    def filtered_data_2():
         year = data.year.between(
             left=input.year_range()[0],
             right=input.year_range()[1],
             inclusive="both",
         )
-        data_filtered = data[year]
+        major_category = data.major_category.isin(input.major_category())
+        borough = data.borough.isin(input.borough_2())
+        data_filtered = data[borough & major_category & year]
         return data_filtered
-    
-    @render.text
-    def total_crimes():
-        df = filtered_data_year()
-        if df.empty:
-            return "No Data"
-        return str(filtered_data_year().shape[0])
 
     # Asked Claude to color the text entry by the associated global crime type color.
-    @render.ui
-    def most_common_crime():
-        df = filtered_data_year()
-        if df.empty:
-            return "No Data"
-        crime = str(filtered_data_year().major_category.value_counts().idxmax())
+    def most_common_crime(df):
+        crime = str(df.major_category.value_counts().idxmax())
         idx = CRIME_COLOR_INDEX.get(crime, 0)
         return ui.tags.span(crime, class_=f"crime-color-{idx}")
 
-    @render.ui
-    def least_common_crime():
-        df = filtered_data_year()
-        if df.empty:
-            return ui.tags.span("No Data")
+    def least_common_crime(df):
         crime = str(df.major_category.value_counts().idxmin())
         idx = CRIME_COLOR_INDEX.get(crime, 0)
         return ui.tags.span(crime, class_=f"crime-color-{idx}")
-
-    @render.text
-    def highest_crime_borough():
-        df = filtered_data_year()
-        if df.empty:
-            return "No Data"
-        return str(df.borough.value_counts().idxmax())
-
-    @render.text
-    def lowest_crime_borough():
-        df = filtered_data_year()
-        if df.empty:
-            return "No Data"
-        return str(filtered_data_year().borough.value_counts().idxmin())
     
-    @render.text
-    def crime_rate():
-        df = filtered_data_year()
-        if df.empty:
-            return "No Data"
-        monthly_crimes = filtered_data_year().groupby(["year", "month"]).size()
+    def crime_rate(df):
+        monthly_crimes = df.groupby(["year", "month"]).size()
         return str(round(monthly_crimes.mean()))
     
     # Create a function for calculating the year label
@@ -276,7 +245,51 @@ def server(input, output, session):
         else:
             return f"{start} - {end}"
     
-    # Need to have 4 seperate functions for the 4 separate cards: when I try to do all 4 with the same function it gives me errors about duplicates.
+    # Render the most and least common crime statistics by borough
+    @render.ui
+    def most_common_crime_1():
+        df = filtered_data_1()
+        if df.empty:
+            return "No Data"
+        return most_common_crime(df)
+    
+    @render.ui
+    def most_common_crime_2():
+        df = filtered_data_2()
+        if df.empty:
+            return "No Data"
+        return most_common_crime(df)
+    
+    @render.ui
+    def least_common_crime_1():
+        df = filtered_data_1()
+        if df.empty:
+            return "No Data"
+        return least_common_crime(df)
+    
+    @render.ui
+    def least_common_crime_2():
+        df = filtered_data_2()
+        if df.empty:
+            return "No Data"
+        return least_common_crime(df)
+    
+    # Render crime rate statistics by borough
+    @render.ui
+    def crime_rate_1():
+        df = filtered_data_1()
+        if df.empty:
+            return "No Data"
+        return crime_rate(df)
+    
+    @render.ui
+    def crime_rate_2():
+        df = filtered_data_2()
+        if df.empty:
+            return "No Data"
+        return crime_rate(df)
+
+    # Need to have 3 seperate functions for the 3 separate cards: when I try to do all 3 with the same function it gives me errors about duplicates.
     @render.text
     def year_label_1():
         return year_label()
@@ -290,8 +303,12 @@ def server(input, output, session):
         return year_label()
     
     @render.text
-    def year_label_4():
-        return year_label()
+    def borough_label_1():
+        return input.borough_1()
+
+    @render.text
+    def borough_label_2():
+        return input.borough_2()
     
     # Borough trend plot
     @render_plotly
@@ -401,10 +418,8 @@ def server(input, output, session):
     @reactive.event(input.reset_filter)
     def reset_filters():
         ui.update_slider("year_range", value=[int(data.year.min()), int(data.year.max())])
-        ui.update_checkbox_group("major_category", selected=[
-            "Theft and Handling", "Criminal Damage", "Robbery",
-            "Drugs", "Violence Against the Person", "Other Notifiable Offences"
-        ])
-        ui.update_selectize("borough", selected=[])
+        ui.update_checkbox_group("major_category", selected=CRIME_TYPES)
+        ui.update_selectize("borough_1", selected="Croydon")
+        ui.update_selectize("borough_2", selected="City of London")
 
 app = App(app_ui, server)
