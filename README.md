@@ -83,3 +83,10 @@ Thank you for your interest in improving the *Crime in London* dashboard.
 
 5. **Open the app** in your browser at `http://127.0.0.1:8000` (or the URL shown in the terminal).
 
+### AI Assistant
+
+The **AI Assistant** tab lets you explore the London crime data with natural language (e.g., "Show only theft crimes in Westminster"). To enable it:
+
+1. Copy `.env.example` to `.env` in the project root.
+2. Add your `GITHUB_TOKEN`
+
