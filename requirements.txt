@@ -102,3 +102,5 @@ xyzservices==2025.11.0
 zipp==3.23.0
 plotly==6.0.1
 shinywidgets==0.5.2
+querychat==0.5.1
+python-dotenv==1.2.2

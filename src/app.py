@@ -1,11 +1,32 @@
-from shiny import App, render, ui, reactive
-import plotly.express as px
-# from ridgeplot import ridgeplot
-# import seaborn as sns
-from shinywidgets import render_plotly, output_widget
+from pathlib import Path
+import os
+
+from dotenv import load_dotenv
 import pandas as pd
+import plotly.express as px
+import querychat
+from shiny import App, render, ui, reactive
+from shinywidgets import render_plotly, output_widget
+
+# Load environment variables for AI assistant (GITHUB_MODEL)
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+github_model = os.getenv("GITHUB_MODEL", "gpt-4.1-mini")
 
 data = pd.read_csv("data/raw/LondonCrimeData.csv")
+
+# QueryChat setup for AI Assistant
+qc = querychat.QueryChat(
+    data,
+    "london_crime",
+    client=f"github/{github_model}",
+    greeting=(
+        "Try asking things like:\n"
+        "- *Show only theft and violence crimes in Westminster*\n"
+        "- *Filter to years 2012-2014 with burglary offences*\n"
+        "- *Which boroughs have the highest crime counts?*\n"
+        "- *Show crimes by type for Camden and Islington*"
+    ),
+)
 
 BOROUGHS = sorted(['Barking and Dagenham', 'Waltham Forest', 'Tower Hamlets', 'Sutton', 'Southwark', 'Richmond upon Thames', 'Redbridge', 'Newham', 'Merton', 'Lewisham', 'Lambeth', 'Kingston upon Thames', 'Kensington and Chelsea', 'Islington', 'Hounslow', 'Wandsworth', 'Hillingdon', 'Harrow', 'Haringey', 'Hammersmith and Fulham', 'Hackney', 'Greenwich', 'Enfield', 'Ealing', 'Croydon', 'City of London', 'Camden', 'Bromley', 'Brent', 'Bexley', 'Barnet', 'Havering', 'Westminster'])
 
@@ -175,12 +196,55 @@ app_ui = ui.page_navbar(
         ),
     ),
 ),
-    ui.nav_panel("AI Assistant",
+    ui.nav_panel(
+        "AI Assistant",
+        ui.layout_sidebar(
+            ui.sidebar(
+                qc.ui(),
+                ui.hr(),
+                ui.p("Example prompts:"),
+                ui.tags.ul(
+                    ui.tags.li("Show only theft and violence crimes in Westminster"),
+                    ui.tags.li("Filter to years 2012-2014 with burglary offences"),
+                    ui.tags.li("Which boroughs have the highest crime counts?"),
+                ),
+                width=400,
+            ),
+            ui.card(
+                ui.card_header("Filtered Data"),
+                ui.output_data_frame("ai_data_table"),
+            ),
+            ui.card(
+                ui.download_button("download_filtered", "Download filtered data"),
+            ),
+            ui.card(
+                ui.card_header("AI query result state"),
+                ui.output_text("ai_filter_state_text"),
+            ),
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Crime by Borough and Type (AI Filtered)"),
+                    output_widget("ai_borough_type_plot"),
+                ),
+                ui.card(
+                    ui.card_header("Crime by Type Over Time (AI Filtered)"),
+                    output_widget("ai_crime_type_trend"),
+                ),
+                col_widths=(6, 6),
+            ),
+            ui.card(
+                ui.card_header("Crime Counts by Type (AI Filtered)"),
+                output_widget("ai_crime_type_counts"),
+            ),
+        ),
     ),
     title="Crime in London",
 )
 
 def server(input, output, session):
+    # Initialize QueryChat server for AI Assistant tab
+    qc_vals = qc.server()
+
     @reactive.calc
     def filtered_data():
         year = data.year.between(
@@ -386,5 +450,88 @@ def server(input, output, session):
         ui.update_slider("year_range", value=[int(data.year.min()), int(data.year.max())])
         ui.update_checkbox_group("major_category", selected=CRIME_TYPES)  # resets all 9
         ui.update_selectize("borough", selected=[])
+
+    # ── AI Assistant tab outputs ─────────────────────────────────────────
+    @render.data_frame
+    def ai_data_table():
+        df = qc_vals.df()
+        return df.to_pandas() if hasattr(df, "to_pandas") else df
+
+    @render.download(filename="filtered_london_crime.csv")
+    def download_filtered():
+        df = qc_vals.df()
+        pdf = df.to_pandas() if hasattr(df, "to_pandas") else df
+        yield pdf.to_csv(index=False)
+
+    @render.text
+    def ai_filter_state_text():
+        df = qc_vals.df()
+        pdf = df.to_pandas() if hasattr(df, "to_pandas") else df
+        return f"Rows: {len(pdf):,} | Columns: {len(pdf.columns):,}"
+
+    @render_plotly
+    def ai_borough_type_plot():
+        df = qc_vals.df()
+        pdf = df.to_pandas() if hasattr(df, "to_pandas") else df
+        if pdf.empty:
+            return px.line(title="No data for current query")
+        if "borough" not in pdf.columns or "major_category" not in pdf.columns:
+            return px.line(title="Required columns not in query result")
+        df_grouped = pdf.groupby(["borough", "major_category"]).size().reset_index(name="count")
+        df_grouped = df_grouped.sort_values("count", ascending=False)
+        fig = px.bar(
+            df_grouped,
+            x="borough",
+            y="count",
+            color="major_category",
+            barmode="stack",
+            title="Crime by Borough and Type",
+            labels={"borough": "Borough", "count": "Number of Crimes", "major_category": "Crime Type"},
+            color_discrete_map=CRIME_COLORS,
+        )
+        return fig
+
+    @render_plotly
+    def ai_crime_type_trend():
+        df = qc_vals.df()
+        pdf = df.to_pandas() if hasattr(df, "to_pandas") else df
+        if pdf.empty:
+            return px.line(title="No data for current query")
+        if "year" not in pdf.columns or "month" not in pdf.columns or "major_category" not in pdf.columns:
+            return px.line(title="Required columns not in query result")
+        df_grouped = pdf.groupby(["year", "month", "major_category"]).size().reset_index(name="count")
+        df_grouped["date"] = pd.to_datetime(df_grouped[["year", "month"]].assign(day=1))
+        fig = px.line(
+            df_grouped,
+            x="date",
+            y="count",
+            color="major_category",
+            title="Crime by Type Over Time",
+            labels={"date": "Date", "count": "Number of Crimes", "major_category": "Crime Type"},
+            color_discrete_map=CRIME_COLORS,
+        )
+        return fig
+
+    @render_plotly
+    def ai_crime_type_counts():
+        df = qc_vals.df()
+        pdf = df.to_pandas() if hasattr(df, "to_pandas") else df
+        if pdf.empty:
+            return px.bar(title="No data for current query")
+        if "major_category" not in pdf.columns:
+            return px.bar(title="Required columns not in query result")
+        df_grouped = pdf.groupby("major_category").size().reset_index(name="count")
+        df_grouped = df_grouped.sort_values("count", ascending=True)
+        fig = px.bar(
+            df_grouped,
+            x="major_category",
+            y="count",
+            color="major_category",
+            title="Crime Counts by Type",
+            labels={"count": "Number of Crimes", "major_category": "Crime Type"},
+            color_discrete_map=CRIME_COLORS,
+        )
+        return fig
+
 
 app = App(app_ui, server)
