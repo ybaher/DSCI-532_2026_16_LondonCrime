@@ -8,15 +8,23 @@ import querychat
 from shiny import App, render, ui, reactive
 from shinywidgets import render_plotly, output_widget
 
+import ibis
+from ibis import _
+
+# Load in the parquet data for the dashboard
+con = ibis.duckdb.connect()
+data_parquet = con.read_parquet("data/processed/LondonCrimeData.parquet")
+
 # Load environment variables for AI assistant (GITHUB_MODEL)
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 github_model = os.getenv("GITHUB_MODEL", "gpt-4.1-mini")
 
-data = pd.read_csv("data/raw/LondonCrimeData.csv")
+# Load in the csv data for the AI chat
+data_csv = pd.read_csv("data/raw/LondonCrimeData.csv")
 
 # QueryChat setup for AI Assistant
 qc = querychat.QueryChat(
-    data,
+    data_csv,
     "london_crime",
     client=f"github/{github_model}",
     greeting=(
@@ -28,8 +36,10 @@ qc = querychat.QueryChat(
     ),
 )
 
+# All boroughs in data set
 BOROUGHS = sorted(['Barking and Dagenham', 'Waltham Forest', 'Tower Hamlets', 'Sutton', 'Southwark', 'Richmond upon Thames', 'Redbridge', 'Newham', 'Merton', 'Lewisham', 'Lambeth', 'Kingston upon Thames', 'Kensington and Chelsea', 'Islington', 'Hounslow', 'Wandsworth', 'Hillingdon', 'Harrow', 'Haringey', 'Hammersmith and Fulham', 'Hackney', 'Greenwich', 'Enfield', 'Ealing', 'Croydon', 'City of London', 'Camden', 'Bromley', 'Brent', 'Bexley', 'Barnet', 'Havering', 'Westminster'])
 
+# All crime types in data set
 CRIME_TYPES = [
     "Theft and Handling",
     "Criminal Damage",
@@ -94,9 +104,9 @@ app_ui = ui.page_navbar(
                 ui.input_slider(
                     "year_range",
                     "Year Range",
-                    min=data.year.min(),
-                    max=data.year.max(),
-                    value=[data.year.min(), data.year.max()],
+                    min=2008,
+                    max=2016,
+                    value=[2008, 2016],
                     sep=""
                 ),
                 # Crime Type Checkbox with Custom Coloring (partner's cleaner approach)
@@ -248,59 +258,73 @@ app_ui = ui.page_navbar(
     title="Crime in London",
 )
 
-
 def server(input, output, session):
     # Initialize QueryChat server for AI Assistant tab
     qc_vals = qc.server()
+
+    # clean up when user leaves session
+    session.on_ended(con.disconnect)
 
     # ── Filtered data reactives ──────────────────────────────────────────
 
     @reactive.calc
     def filtered_data_1():
         """Data filtered to borough_1 selection, selected crime types, and year range."""
-        year = data.year.between(input.year_range()[0], input.year_range()[1], inclusive="both")
-        # major_category = data.major_category.isin(input.major_category())
-        borough = data.borough == input.borough_1()
-        return data[borough & year]
+        return (
+            data_parquet.filter([
+                _.year.between(input.year_range()[0], input.year_range()[1]),
+                _.borough == input.borough_1()
+            ])
+        )
 
     @reactive.calc
     def filtered_data_2():
         """Data filtered to borough_2 selection, selected crime types, and year range."""
-        year = data.year.between(input.year_range()[0], input.year_range()[1], inclusive="both")
-        # major_category = data.major_category.isin(input.major_category())
-        borough = data.borough == input.borough_2()
-        return data[borough & year]
+        return (
+            data_parquet.filter([
+                _.year.between(input.year_range()[0], input.year_range()[1]),
+                _.borough == input.borough_2()
+            ])
+        )
 
     @reactive.calc
     def filtered_data_london():
         """London-wide data filtered to selected crime types and year range (for summary boxes)."""
-        year = data.year.between(input.year_range()[0], input.year_range()[1], inclusive="both")
-        # major_category = data.major_category.isin(input.major_category())
-        return data[year]
+        return (
+            data_parquet.filter([
+                _.year.between(input.year_range()[0], input.year_range()[1])
+            ])
+        )
 
     @reactive.calc
     def filtered_data_both():
         """Data for both selected boroughs combined — used for comparison plots."""
-        year = data.year.between(input.year_range()[0], input.year_range()[1], inclusive="both")
-        major_category = data.major_category.isin(input.major_category())
-        borough = data.borough.isin([input.borough_1(), input.borough_2()])
-        return data[borough & major_category & year]
+        return (
+            data_parquet.filter([
+                _.year.between(input.year_range()[0], input.year_range()[1]),
+                _.borough.isin([input.borough_1(), input.borough_2()]),
+                _.major_category.isin(input.major_category())
+            ])
+        )
 
     # ── Helper functions ─────────────────────────────────────────────────
 
-    def most_common_crime(df):
+    def most_common_crime(function):
+        df = function().execute()
         crime = str(df.major_category.value_counts().idxmax())
         idx = CRIME_COLOR_INDEX.get(crime, 0)
-        return ui.tags.span(crime, class_=f"crime-color-{idx}")
+        return ui.tags.span("No Data") if df.empty else ui.tags.span(crime, class_=f"crime-color-{idx}")
 
-    def least_common_crime(df):
+    def least_common_crime(function):
+        df = function().execute()
         crime = str(df.major_category.value_counts().idxmin())
         idx = CRIME_COLOR_INDEX.get(crime, 0)
-        return ui.tags.span(crime, class_=f"crime-color-{idx}")
+        return ui.tags.span("No Data") if df.empty else ui.tags.span(crime, class_=f"crime-color-{idx}")
 
-    def calc_crime_rate(df):
+    def calc_crime_rate(function):
+        df = function().execute()
         monthly_crimes = df.groupby(["year", "month"]).size()
-        return str(round(monthly_crimes.mean()))
+        return ui.tags.span("No Data") if df.empty else str(round(monthly_crimes.mean()))
 
     def year_label():
         start, end = input.year_range()
@@ -332,56 +356,47 @@ def server(input, output, session):
 
     @render.ui
     def crime_rate_london():
-        df = filtered_data_london()
-        return ui.tags.span("No Data") if df.empty else ui.tags.span(calc_crime_rate(df))
+        return calc_crime_rate(filtered_data_london)
 
     @render.ui
     def most_common_crime_london():
-        df = filtered_data_london()
-        return ui.tags.span("No Data") if df.empty else most_common_crime(df)
+        return most_common_crime(filtered_data_london)
 
     @render.ui
     def least_common_crime_london():
-        df = filtered_data_london()
-        return ui.tags.span("No Data") if df.empty else least_common_crime(df)
+        return least_common_crime(filtered_data_london)
 
     # ── Per-borough stats ────────────────────────────────────────────────
 
     @render.ui
     def most_common_crime_1():
-        df = filtered_data_1()
-        return ui.tags.span("No Data") if df.empty else most_common_crime(df)
+        return most_common_crime(filtered_data_1)
 
     @render.ui
     def most_common_crime_2():
-        df = filtered_data_2()
-        return ui.tags.span("No Data") if df.empty else most_common_crime(df)
+        return most_common_crime(filtered_data_2)
 
     @render.ui
     def least_common_crime_1():
-        df = filtered_data_1()
-        return ui.tags.span("No Data") if df.empty else least_common_crime(df)
+        return least_common_crime(filtered_data_1)
 
     @render.ui
     def least_common_crime_2():
-        df = filtered_data_2()
-        return ui.tags.span("No Data") if df.empty else least_common_crime(df)
+        return least_common_crime(filtered_data_2)
 
     @render.ui
     def crime_rate_1():
-        df = filtered_data_1()
-        return ui.tags.span("No Data") if df.empty else ui.tags.span(calc_crime_rate(df))
+        return calc_crime_rate(filtered_data_1)
 
     @render.ui
     def crime_rate_2():
-        df = filtered_data_2()
-        return ui.tags.span("No Data") if df.empty else ui.tags.span(calc_crime_rate(df))
+        return calc_crime_rate(filtered_data_2)
 
     # ── Plots ────────────────────────────────────────────────────────────
 
     @render_plotly
     def borough_trend():
-        df = filtered_data_both()
+        df = filtered_data_both().execute()
         if df.empty:
             return px.bar(title="No data — select boroughs")
         df_grouped = df.groupby(["borough", "major_category"]).size().reset_index(name="count")
@@ -400,7 +415,7 @@ def server(input, output, session):
 
     @render_plotly
     def crime_type_counts():
-        df = filtered_data_both()
+        df = filtered_data_both().execute()
         if df.empty:
             return px.bar(title="No data — select boroughs")
         df_grouped = df.groupby(["major_category", "borough"]).size().reset_index(name="count")
@@ -420,7 +435,7 @@ def server(input, output, session):
 
     @render_plotly
     def borough_month_heatmap():
-        df = filtered_data_both()
+        df = filtered_data_both().execute()
         if df.empty:
             return px.imshow([[]], title="No data — select boroughs")
         df_grouped = df.groupby(["borough", "month"]).size().reset_index(name="count")
@@ -440,7 +455,7 @@ def server(input, output, session):
     @reactive.effect
     @reactive.event(input.reset_filter)
     def reset_filters():
-        ui.update_slider("year_range", value=[int(data.year.min()), int(data.year.max())])
+        ui.update_slider("year_range", value=[2008, 2016])
         ui.update_checkbox_group("major_category", selected=CRIME_TYPES)
         ui.update_selectize("borough_1", selected="Croydon")
         ui.update_selectize("borough_2", selected="City of London")
@@ -527,6 +542,5 @@ def server(input, output, session):
             color_discrete_map=CRIME_COLORS,
         )
         return fig
-
 
 app = App(app_ui, server)
