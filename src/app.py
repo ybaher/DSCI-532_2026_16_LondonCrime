@@ -214,13 +214,13 @@ app_ui = ui.page_navbar(
                 ui.card_header("Filtered Data"),
                 ui.output_data_frame("ai_data_table"),
             ),
-            ui.card(
-                ui.download_button("download_filtered", "Download filtered data"),
-            ),
-            ui.card(
-                ui.card_header("AI query result state"),
-                ui.output_text("ai_filter_state_text"),
-            ),
+            # ui.card(
+            #     ui.download_button("download_filtered", "Download filtered data"),
+            # ),
+            # ui.card(
+            #     ui.card_header("AI query result state"),
+            #     ui.output_text("ai_filter_state_text"),
+            # ),
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Crime by Borough and Type (AI Filtered)"),
