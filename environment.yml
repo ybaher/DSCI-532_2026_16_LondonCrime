@@ -17,3 +17,4 @@ dependencies:
         - altair_ally
         - querychat
         - python-dotenv
+        - ibis-framework[duckdb]
