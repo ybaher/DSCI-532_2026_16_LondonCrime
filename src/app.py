@@ -4,9 +4,10 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import querychat
 from shiny import App, render, ui, reactive
-from shinywidgets import render_plotly, output_widget
+from shinywidgets import render_plotly, render_widget, output_widget
 
 import ibis
 from ibis import _
@@ -185,7 +186,21 @@ app_ui = ui.page_navbar(
                 ),
                 ui.nav_panel(
                     "Crime Type Breakdown",
-                    ui.card(output_widget("crime_type_counts"), full_screen=True),
+                    ui.card(
+                        ui.card_header(
+                            "Amount of Crime by Type",
+                            ui.tags.span(" · ", style="opacity: 0.5"),
+                            ui.tags.small(
+                                "Click a bar to filter by crime type",
+                                class_="text-muted",
+                            ),
+                        ),
+                        output_widget("crime_type_counts"),
+                        ui.input_action_button(
+                            "clear_chart_selection", "Clear chart selection"
+                        ),
+                        full_screen=True,
+                    ),
                 ),
                 ui.nav_panel(
                     "Crime Intensity By Month",
@@ -262,6 +277,9 @@ def server(input, output, session):
     # Initialize QueryChat server for AI Assistant tab
     qc_vals = qc.server()
 
+    # Reactive value for chart click filter
+    clicked_crime_type = reactive.value(None)
+
     # clean up when user leaves session
     session.on_ended(con.disconnect)
 
@@ -298,13 +316,23 @@ def server(input, output, session):
 
     @reactive.calc
     def filtered_data_both():
-        """Data for both selected boroughs combined — used for comparison plots."""
-        return (
-            data_parquet.filter([
+        """Data for both selected boroughs combined — used for comparison plots.
+
+        If a bar is clicked in the Crime Type Breakdown chart, filter to that
+        specific crime type; otherwise, respect the checkbox selection.
+        """
+        ct = clicked_crime_type.get()
+        if ct is not None:
+            major_category_filter = _.major_category == ct
+        else:
+            major_category_filter = _.major_category.isin(input.major_category())
+
+        return data_parquet.filter(
+            [
                 _.year.between(input.year_range()[0], input.year_range()[1]),
                 _.borough.isin([input.borough_1(), input.borough_2()]),
-                _.major_category.isin(input.major_category())
-            ])
+                major_category_filter,
+            ]
         )
 
     # ── Helper functions ─────────────────────────────────────────────────
@@ -413,11 +441,12 @@ def server(input, output, session):
         )
         return fig
 
-    @render_plotly
+    @render_widget
     def crime_type_counts():
         df = filtered_data_both().execute()
         if df.empty:
-            return px.bar(title="No data — select boroughs")
+            # Return an empty figure widget so click behavior is consistent
+            return go.FigureWidget(px.bar(title="No data — select boroughs"))
         df_grouped = df.groupby(["major_category", "borough"]).size().reset_index(name="count")
         df_grouped = df_grouped.sort_values("count", ascending=True)
         fig = px.bar(
@@ -431,7 +460,26 @@ def server(input, output, session):
             color_discrete_map=CRIME_COLORS,
         )
         fig.update_layout(margin=dict(t=80))
-        return fig
+        # Convert to FigureWidget for click events; clicking a bar filters
+        # the dashboard to that crime type.
+        w = go.FigureWidget(fig)
+
+        def on_bar_click(trace, points, state):
+            if not points.point_inds:
+                return
+            idx = points.point_inds[0]
+            x_vals = getattr(trace, "x", None) or []
+            if isinstance(x_vals, (list, tuple)) and idx < len(x_vals):
+                crime_type = x_vals[idx]
+            else:
+                crime_type = getattr(trace, "name", None)
+            if crime_type and crime_type in CRIME_TYPES:
+                clicked_crime_type.set(crime_type)
+
+        for trace in w.data:
+            trace.on_click(on_bar_click)
+
+        return w
 
     @render_plotly
     def borough_month_heatmap():
@@ -459,6 +507,12 @@ def server(input, output, session):
         ui.update_checkbox_group("major_category", selected=CRIME_TYPES)
         ui.update_selectize("borough_1", selected="Croydon")
         ui.update_selectize("borough_2", selected="City of London")
+        clicked_crime_type.set(None)
+
+    @reactive.effect
+    @reactive.event(input.clear_chart_selection)
+    def clear_chart_selection():
+        clicked_crime_type.set(None)
 
     # ── AI Assistant tab outputs ─────────────────────────────────────────
 
