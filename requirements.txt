@@ -104,3 +104,4 @@ plotly==6.0.1
 shinywidgets==0.5.2
 querychat==0.5.1
 python-dotenv==1.2.2
+ibis-framework[duckdb]
