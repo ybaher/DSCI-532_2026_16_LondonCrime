@@ -11,9 +11,8 @@ from shinywidgets import render_plotly, output_widget
 import ibis
 from ibis import _
 
-# Load in the parquet data for the dashboard
-con = ibis.duckdb.connect()
-data_parquet = con.read_parquet("data/processed/LondonCrimeData.parquet")
+# Parquet path (relative to project root); connection created per-session in server()
+PARQUET_PATH = "data/processed/LondonCrimeData.parquet"
 
 # Load environment variables for AI assistant (GITHUB_MODEL)
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -259,11 +258,13 @@ app_ui = ui.page_navbar(
 )
 
 def server(input, output, session):
+    # Per-session DuckDB connection (avoids "Connection already closed" when connection was shared)
+    con = ibis.duckdb.connect()
+    data_parquet = con.read_parquet(PARQUET_PATH)
+    session.on_ended(con.disconnect)
+
     # Initialize QueryChat server for AI Assistant tab
     qc_vals = qc.server()
-
-    # clean up when user leaves session
-    session.on_ended(con.disconnect)
 
     # ── Filtered data reactives ──────────────────────────────────────────
 
