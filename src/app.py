@@ -1,15 +1,16 @@
 from pathlib import Path
+import sys
 import os
-
+sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 import pandas as pd
 import plotly.express as px
 import querychat
 from shiny import App, render, ui, reactive
 from shinywidgets import render_plotly, output_widget
-
 import ibis
 from ibis import _
+from utils import filtered_data, filtered_data_year, total_crimes
 
 # Parquet path (relative to project root); connection created per-session in server()
 PARQUET_PATH = "data/processed/LondonCrimeData.parquet"

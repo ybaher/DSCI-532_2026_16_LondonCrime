@@ -17,6 +17,9 @@
 
 ### Fixed
 
+- Summary cards and plots now handle empty filtered data gracefully, displaying "No Data" instead of errors when filters return no results.
+- Fix cards being too small for readability.
+
 ### Known Issues
 
 - AI chatbot can take a very long time to load, even on the first message.
