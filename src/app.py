@@ -30,11 +30,7 @@ qc = querychat.QueryChat(
     "london_crime",
     client=f"github/{github_model}",
     greeting=(
-        "Try asking things like:\n"
-        "- *Show only theft and violence crimes in Westminster*\n"
-        "- *Filter to years 2012-2014 with burglary offences*\n"
-        "- *Which boroughs have the highest crime counts?*\n"
-        "- *Show crimes by type for Camden and Islington*"
+        "Welcome! I'm an AI chatbot for the London Crime Dashboard. I can filter the data to any combination of years, boroughs, and crime types, calculate summary statistics, and answer simple questions about this data. Ask me a question to get started!\n"
     ),
 )
 
